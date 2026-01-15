@@ -3,24 +3,23 @@
  */
 class _Mycel {
   currentComputation: Computation | null = null;
-  queue: Computation[] = [];
+  queue: Set<Computation> = new Set();
   isBatching: boolean = false;
-  epoch: number = 0;
-
-  private constructor() {}
-
-  static _instance: _Mycel = new _Mycel();
 
   schedule(comp: Computation) {
     if (this.isBatching) {
-      this.queue.push(comp);
+      this.queue.add(comp);
     } else {
       comp.run();
     }
   }
+
+  flush() {
+    this.queue.forEach((c) => c.run());
+  }
 }
 
-const mycel = _Mycel._instance;
+const mycel = new _Mycel();
 
 /**
  * A reactive computation that re-runs whenever its dependents change.
@@ -71,6 +70,39 @@ class Reative<T> {
     this.listeners.forEach((comp) => mycel.schedule(comp));
     this.listeners.clear();
   }
+
+  peek() {
+    return this.value;
+  }
+
+  read() {
+    if (mycel.currentComputation) {
+      this.listeners.add(mycel.currentComputation);
+    }
+    return this.value;
+  }
+
+  set(v: T) {
+    if (this.computation) {
+      throw new Error("Tried to call set on a computed value");
+    }
+    this.value = v;
+    this.notify();
+  }
+
+  update(fn: (v: T) => T) {
+    this.set(fn(this.value));
+  }
+}
+
+/**
+ * Calls a batch of functions, combines notifications at the end
+ */
+function batch(fn: () => void) {
+  mycel.isBatching = true;
+  fn();
+  mycel.isBatching = false;
+  mycel.flush();
 }
 
 // Utilities
